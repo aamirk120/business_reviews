@@ -75,20 +75,30 @@ router.get('/', async function (req, res) {
  * Route to create a new business.
  */
 router.post('/', async function (req, res, next) {
-  if (validateAgainstSchema(req.body, businessSchema)) {
-    let business = extractValidFields(req.body, businessSchema)
-    business = await BusinessesModel.create(business);
-    res.status(201).send({
-      id: business.id,
-      links: {
-        business: `/businesses/${business.id}`
-      }
-    })
-  } else {
-    res.status(400).send({
+  const { user } = req
+
+  if (!validateAgainstSchema(req.body, businessSchema)) {
+    return res.status(400).send({
       error: "Request body is not a valid business object"
     })
   }
+
+
+  let business = extractValidFields(req.body, businessSchema)
+
+  if (user.id !== business.ownerid) {
+    return res.status(403).send({
+      error: "not authorized"
+    });
+  }
+
+  business = await BusinessesModel.create(business);
+  res.status(201).send({
+    id: business.id,
+    links: {
+      business: `/businesses/${business.id}`
+    }
+  })
 })
 
 /*
@@ -114,27 +124,37 @@ router.get('/:businessid', async function (req, res, next) {
  */
 router.put('/:businessid', async function (req, res, next) {
   const { businessid } = req.params
-  if (businessid) {
+  const { user } = req
 
-    if (validateAgainstSchema(req.body, businessSchema)) {
-      await BusinessesModel.updateOne(
-        { _id: businessid },
-        { ...extractValidFields(req.body, businessSchema) }
-      )
-      res.status(200).send({
-        links: {
-          business: `/businesses/${businessid}`
-        }
-      })
-    } else {
-      res.status(400).send({
-        error: "Request body is not a valid business object"
-      })
-    }
-
-  } else {
-    next()
+  if (!businessid) {
+    return next()
   }
+
+  if (!validateAgainstSchema(req.body, businessSchema)) {
+    return res.status(400).send({
+      error: "Request body is not a valid business object"
+    })
+
+  }
+
+  const updatedBusiness = extractValidFields(req.body, businessSchema)
+
+  if (user.id !== updatedBusiness.ownerid) {
+    return res.status(403).send({
+      error: "not authorized"
+    });
+  }
+
+  await BusinessesModel.updateOne(
+    { _id: businessid },
+    { updatedBusiness }
+  )
+  res.status(200).send({
+    links: {
+      business: `/businesses/${businessid}`
+    }
+  })
+
 })
 
 /*
@@ -142,10 +162,21 @@ router.put('/:businessid', async function (req, res, next) {
  */
 router.delete('/:businessid', async function (req, res, next) {
   const { businessid } = req.params
-  if (businessid) {
-    await BusinessesModel.deleteOne({ _id: businessid })
-    res.status(204).end()
-  } else {
-    next()
+  const { user } = req
+
+  if (!businessid) {
+    return next()
   }
+
+  const business = await BusinessesModel.findOne({ _id: businessid }).lean(true)
+
+  if (user.id !== business.ownerid) {
+    return res.status(403).send({
+      error: "not authorized"
+    });
+  }
+
+  await BusinessesModel.deleteOne({ _id: businessid })
+  res.status(204).end()
+
 })

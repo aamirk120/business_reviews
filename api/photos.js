@@ -19,22 +19,30 @@ const photoSchema = {
  * Route to create a new photo.
  */
 router.post('/', async function (req, res, next) {
-  if (validateAgainstSchema(req.body, photoSchema)) {
-    const photo = extractValidFields(req.body, photoSchema)
-    photo = await PhotoModel.create(business);
-
-    res.status(201).send({
-      id: photo.id,
-      links: {
-        photo: `/photos/${photo.id}`,
-        business: `/businesses/${photo.businessid}`
-      }
-    })
-  } else {
-    res.status(400).send({
+  const { user } = req
+  if (!validateAgainstSchema(req.body, photoSchema)) {
+    return res.status(400).send({
       error: "Request body is not a valid photo object"
     })
   }
+
+  const photo = extractValidFields(req.body, photoSchema)
+
+  if (user.id !== photo.userid) {
+    return res.status(403).send({
+      error: "not authorized"
+    });
+  }
+
+  photo = await PhotoModel.create(business);
+
+  res.status(201).send({
+    id: photo.id,
+    links: {
+      photo: `/photos/${photo.id}`,
+      business: `/businesses/${photo.businessid}`
+    }
+  })
 })
 
 /*
@@ -66,7 +74,7 @@ router.put('/:photoID', async function (req, res, next) {
       const updatedPhoto = extractValidFields(req.body, photoSchema)
       const existingPhoto = await PhotoModel.findOne({ _id: photoID }, {}, { lean: true })
       if (existingPhoto && updatedPhoto.businessid === existingPhoto.businessid && updatedPhoto.userid === existingPhoto.userid) {
-        await Photo.updateOne(
+        await PhotoModel.updateOne(
           { _id: photoID },
           updatedPhoto
         )
@@ -97,10 +105,18 @@ router.put('/:photoID', async function (req, res, next) {
  */
 router.delete('/:photoID', async function (req, res, next) {
   const { photoID } = req.params
-  if (photoID) {
-    await PhotoModel.deleteOne({ _id: photoID })
-    res.status(204).end()
-  } else {
-    next()
+  if (!photoID) {
+    return next()
   }
+
+  const photo = await PhotoModel.findOne({ _id: photoID }).lean(true)
+
+  if (photo.userid.toString() !== user.id) {
+    return res.status(403).send({
+      error: "not authorized"
+    });
+  }
+  await PhotoModel.deleteOne({ _id: photoID })
+  res.status(204).end()
+
 })

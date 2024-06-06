@@ -22,9 +22,17 @@ const reviewSchema = {
  * Route to create a new review.
  */
 router.post('/', async function (req, res, next) {
+  const { user } = req
   if (validateAgainstSchema(req.body, reviewSchema)) {
 
     const review = extractValidFields(req.body, reviewSchema)
+
+    if (user.id !== review.userid) {
+      return res.status(403).send({
+        error: "not authorized"
+      });
+    }
+
 
     /*
      * Make sure the user is not trying to review the same business twice.
@@ -77,45 +85,47 @@ router.get('/:reviewID', async function (req, res, next) {
  */
 router.put('/:reviewID', async function (req, res, next) {
   const { reviewID } = req.params
-  if (reviewID) {
 
-    if (validateAgainstSchema(req.body, reviewSchema)) {
-      /*
-       * Make sure the updated review has the same businessid and userid as
-       * the existing review.
-       */
-      let updatedReview = extractValidFields(req.body, reviewSchema)
-      const existingReview = await ReviewModel.findOne(
-        {
-          userid: review.userid,
-          businessid: review.businessid
-        }
-      ).lean(true);
-      if (updatedReview.businessid === existingReview.businessid && updatedReview.userid === existingReview.userid) {
-        await ReviewModel.updateOne(
-          { _id: reviewID },
-          updatedReview
-        )
-        res.status(200).send({
-          links: {
-            review: `/reviews/${reviewID}`,
-            business: `/businesses/${updatedReview.businessid}`
-          }
-        })
-      } else {
-        res.status(403).send({
-          error: "Updated review cannot modify businessid or userid"
-        })
-      }
-    } else {
-      res.status(400).send({
-        error: "Request body is not a valid review object"
-      })
-    }
-
-  } else {
-    next()
+  if (!reviewID) {
+    return next()
   }
+
+  if (!validateAgainstSchema(req.body, reviewSchema)) {
+    return res.status(400).send({
+      error: "Request body is not a valid review object"
+    })
+  }
+
+  /*
+  * Make sure the updated review has the same businessid and userid as
+  * the existing review.
+  */
+  let updatedReview = extractValidFields(req.body, reviewSchema)
+  const existingReview = await ReviewModel.findOne(
+    {
+      userid: updatedReview.userid,
+      businessid: updatedReview.businessid
+    }
+  ).lean(true);
+
+
+  if (updatedReview.businessid === existingReview.businessid && updatedReview.userid === existingReview.userid) {
+    await ReviewModel.updateOne(
+      { _id: reviewID },
+      updatedReview
+    )
+    res.status(200).send({
+      links: {
+        review: `/reviews/${reviewID}`,
+        business: `/businesses/${updatedReview.businessid}`
+      }
+    })
+  } else {
+    res.status(403).send({
+      error: "Updated review cannot modify businessid or userid"
+    })
+  }
+
 })
 
 /*
@@ -123,10 +133,23 @@ router.put('/:reviewID', async function (req, res, next) {
  */
 router.delete('/:reviewID', async function (req, res, next) {
   const { reviewID } = req.params
-  if (reviewID) {
-    await ReviewModel.deleteOne({ _id: reviewID })
-    res.status(204).end()
-  } else {
-    next()
+  const { user } = req
+
+  if (!reviewID) {
+    return next()
   }
+  const review = ReviewModel.findOne({ _id: reviewID }).lean(true)
+
+  if (!review) {
+    return next;
+  }
+
+  if (user.id !== review.userid.toString()) {
+    return res.status(403).send({
+      error: "not authorized"
+    });
+  }
+
+  await ReviewModel.deleteOne({ _id: reviewID })
+  res.status(204).end()
 })

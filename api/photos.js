@@ -1,7 +1,11 @@
 const router = require('express').Router()
+
 const { validateAgainstSchema, extractValidFields } = require('../lib/validation')
 
 const PhotoModel = require('../models/photo.model')
+const { validateToken } = require('../lib/jwt')
+const upload = require('../lib/file-upload')
+const { sendToQueue } = require('../lib/rmq-producer')
 
 exports.router = router
 
@@ -18,23 +22,25 @@ const photoSchema = {
 /*
  * Route to create a new photo.
  */
-router.post('/', async function (req, res, next) {
+router.post('/', validateToken, upload.single('file'), async function (req, res, next) {
   const { user } = req
+
   if (!validateAgainstSchema(req.body, photoSchema)) {
     return res.status(400).send({
       error: "Request body is not a valid photo object"
     })
   }
 
-  const photo = extractValidFields(req.body, photoSchema)
+  let photo = extractValidFields(req.body, photoSchema)
 
+  photo._id = req.file.filename.split('.')[0]
   if (user.id !== photo.userid) {
     return res.status(403).send({
       error: "not authorized"
     });
   }
 
-  photo = await PhotoModel.create(business);
+  photo = await PhotoModel.create(photo);
 
   res.status(201).send({
     id: photo.id,
@@ -43,6 +49,8 @@ router.post('/', async function (req, res, next) {
       business: `/businesses/${photo.businessid}`
     }
   })
+
+  sendToQueue({ filename: req.file.filename })
 })
 
 /*

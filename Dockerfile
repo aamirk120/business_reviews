@@ -1,7 +1,11 @@
 FROM node:18
 WORKDIR /usr/src/app
-COPY . .
+
+COPY package.json ./
+
 RUN npm install
-ENV PORT=8000
+
+COPY . .
+
 EXPOSE ${PORT}
 CMD [ "npm", "start" ]

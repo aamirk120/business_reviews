@@ -1,0 +1,51 @@
+version: '3'
+services:
+  rabbitmq:
+    image: rabbitmq:management
+    ports:
+      - "${RABBITMQ_PORT}:${RABBITMQ_PORT}"
+      - "${RABBITMQ_DASHBOARD_PORT}:${RABBITMQ_DASHBOARD_PORT}"
+    environment:
+      - RABBITMQ_DEFAULT_USER=${RABBITMQ_USER}
+      - RABBITMQ_DEFAULT_PASS=${RABBITMQ_PASS}
+  
+  mongo1:
+    image: mongo:4.4
+    container_name: mongo1
+    ports:
+      - "${MONGO_PORT1}:${MONGO_PORT1}"
+    environment:
+      - MONGO_INITDB_ROOT_USERNAME=root
+      - MONGO_INITDB_ROOT_PASSWORD=example
+      - MONGO_INITDB_DATABASE=admin
+      - MONGO_REPLICA_SET_NAME=rs0
+    command: ["mongod", "--replSet", "rs0"]
+
+  mongo2:
+    image: mongo:4.4
+    container_name: mongo2
+    ports:
+      - "${MONGO_PORT2}:${MONGO_PORT2}"
+    environment:
+      - MONGO_INITDB_ROOT_USERNAME=root
+      - MONGO_INITDB_ROOT_PASSWORD=example
+      - MONGO_INITDB_DATABASE=admin
+      - MONGO_REPLICA_SET_NAME=rs0
+    command: ["mongod", "--replSet", "rs0"]
+
+  mongo_setup:
+    image: mongo:4.4
+    depends_on:
+      - mongo1
+      - mongo2
+    entrypoint: ["sh", "-c", "sleep 10 && mongo --host mongo1 --eval 'rs.initiate({_id: \"rs0\", members: [{ _id: 0, host: \"mongo1:27017\" }, { _id: 1, host: \"mongo2:27017\" }]})'"]
+
+  web:
+    build: .
+    ports:
+      - "${PORT}:${PORT}"
+    depends_on:
+      - rabbitmq
+      - mongo_setup
+    env_file:
+      - .env

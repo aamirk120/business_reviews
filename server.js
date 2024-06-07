@@ -2,11 +2,11 @@ require("dotenv").config();
 const express = require('express')
 const morgan = require('morgan')
 
-const api = require('./api')
+const api = require('./api');
 
 const app = express()
 const port = process.env.PORT || 8000
-
+global.__rootdir = __dirname;
 /*
  * Morgan is a popular request logger.
  */
@@ -35,11 +35,12 @@ app.use('*', function (req, res, next) {
 app.use('*', function (err, req, res, next) {
   console.error("== Error:", err)
   res.status(500).send({
-      error: "Server error.  Please try again later."
+    error: "Server error.  Please try again later."
   })
 })
 
-app.listen(port, function() {
+app.listen(port, function () {
   console.log("== Server is running on port", port);
   require('./config/database').connectDB()
+  require("./lib/rmq-consumer").consumeFromQueue()
 })
